@@ -102,13 +102,49 @@ describe("MarketPlace", () => {
         expect(sellerBalanceAfterRemoval).to.be.equal(sellerBalanceAfter.add(1));
         expect(marketPlaceBalanceAfterRemoval).to.be.equal(marketPlaceBalanceAfter.sub(1));
 
-        // buyer can buy from seller1
+        // buyer cannot buy without sending enough fund
         let amountToBuy = 2
         let totalPrice = amountToBuy * price
 
-        /* await expect(MarketPlace.connect(seller1).removeItem(ERC1155A.address, id, 1))
-            .to.emit(MarketPlace, "RemoveItem").withArgs(seller1.address, ERC1155A.address, id, 1)
-            .to.emit(ERC1155A, "TransferSingle").withArgs(MarketPlace.address, MarketPlace.address, seller1.address, id, 1); */
-    });
 
+
+        await expect(MarketPlace.connect(buyer1).buyItem(seller1.address, ERC1155A.address, id, amountToBuy, {value: totalPrice - 1}))
+            .to.be.revertedWith("MarketPlace: not enought ETH to cover total price.");
+
+        // buyer1 can buy from seller1, here we only check the events
+        await expect(MarketPlace.connect(buyer1).buyItem(seller1.address, ERC1155A.address, id, amountToBuy, {value: totalPrice}))
+            .to.emit(MarketPlace, "BuyItem").withArgs(buyer1.address, seller1.address, ERC1155A.address, id, amountToBuy, price)
+            .to.emit(ERC1155A, "TransferSingle").withArgs(MarketPlace.address, MarketPlace.address, buyer1.address, id, amountToBuy);
+        
+        // buyer1 can buy from seller1, here we check ERC1155 and ETH balances (we also have to consider txn gas cost)
+
+        let buyerERC1155BalanceBeforePurchase = await ERC1155A.balanceOf(buyer1.address, id);
+        let marketPlaceERC1155BalanceBeforePurchase = await ERC1155A.balanceOf(MarketPlace.address, id);
+
+        let provider = hre.ethers.provider;
+
+        let sellerETHBalanceBeforePurchase = await provider.getBalance(seller1.address);
+        let buyerETHBalanceBeforePurchase = await provider.getBalance(buyer1.address);
+
+        let purchaseTxn = await MarketPlace.connect(buyer1).buyItem(seller1.address, ERC1155A.address, id, amountToBuy, {value: totalPrice});
+
+        let purchaseTxnHash = purchaseTxn.hash
+        let purchaseReceipt = await provider.getTransactionReceipt(purchaseTxnHash);
+        let gasCost = purchaseReceipt.gasUsed * purchaseReceipt.effectiveGasPrice;
+
+        let buyerERC1155BalanceAfterPurchase = await ERC1155A.balanceOf(buyer1.address, id);
+        let marketPlaceERC1155BalanceAfterPurchase = await ERC1155A.balanceOf(MarketPlace.address, id);
+
+        expect(buyerERC1155BalanceAfterPurchase).to.be.equal(buyerERC1155BalanceBeforePurchase.add(amountToBuy));
+        expect(marketPlaceERC1155BalanceAfterPurchase).to.be.equal(marketPlaceERC1155BalanceBeforePurchase.sub(amountToBuy));
+
+        let sellerETHBalanceAfterPurchase = await provider.getBalance(seller1.address);
+        let buyerETHBalanceAfterPurchase = await provider.getBalance(buyer1.address);
+
+        expect(sellerETHBalanceAfterPurchase).to.be.equal(sellerETHBalanceBeforePurchase.add(totalPrice));
+        expect(buyerETHBalanceAfterPurchase).to.be.equal(buyerETHBalanceBeforePurchase.sub(totalPrice).sub(gasCost));
+
+        
+        
+    });
 });

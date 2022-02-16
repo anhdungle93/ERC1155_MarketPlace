@@ -84,6 +84,7 @@ contract MarketPlace is ERC1155Holder {
         require(msg.value >= totalPrice, "MarketPlace: not enought ETH to cover total price.");
         saleInfo.amount = saleInfo.amount - _amount;
         _seller.transfer(totalPrice);
+        IERC1155(_tokenAddress).safeTransferFrom(address(this), msg.sender, _id, _amount, "");
         payable(msg.sender).transfer(msg.value - totalPrice);
         emit BuyItem(msg.sender, _seller, _tokenAddress, _id, _amount, _price);
     }
@@ -91,7 +92,6 @@ contract MarketPlace is ERC1155Holder {
     /// @param _seller the seller who listed the item
     /// @param _tokenAddress the address of ERC1155
     /// @param _id the token id inside ERC1155
-    /// @return amount and price of each unit
     function checkItem(address _seller, address _tokenAddress, uint256 _id) public view returns(uint256 _amount, uint256 _price){
         bytes32 saleID = keccak256(abi.encode(_seller, _tokenAddress, _id));
         SaleInfo storage saleInfo = inventory[saleID];
